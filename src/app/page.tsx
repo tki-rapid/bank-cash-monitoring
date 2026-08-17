@@ -1,11 +1,12 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { Banknote, BarChart3, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, LayoutDashboard, LogIn, Plus, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
+import { Banknote, BarChart3, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, LayoutDashboard, Plus, RefreshCw, ShieldCheck, WalletCards } from "lucide-react";
 
 type Role = "CEO" | "FINANCE";
 type View = "dashboard" | "accounts" | "expenses" | "forecast";
 type Actor = { id: string; name: string; role: Role };
+type Bank = { id: string; code: string; name: string };
 type Balance = { accountId: string; bank: string; displayName: string; accountNumber: string; availableBalance: number | string; capturedAt: string | null; source: "manual" | "computer_use"; freshness: "current" | "stale" };
 type Expense = { id: string; title: string; category: string; amount: number | string; plannedDate: string; status: "submitted" | "approved" | "paid"; recurrence: string };
 type ForecastMonth = { month: string; closingBalance: number | string; inflows: number | string; outflows: number | string };
@@ -18,11 +19,10 @@ type Translation = {
   forecast: string;
   balance: string;
   manual: string;
-  retrieve: string;
   sourceManual: string;
-  sourceAuto: string;
   current: string;
   stale: string;
+  sourceLegacy: string;
   finance: string;
   ceo: string;
 };
@@ -30,8 +30,8 @@ type Translation = {
 const idr = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 const date = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" });
 const labels: Record<"id" | "en", Translation> = {
-  id: { dashboard: "Dashboard Kas", accounts: "Rekening Bank", expenses: "Rencana Pengeluaran", forecast: "Forecast 6 Bulan", balance: "Saldo tersedia", manual: "Input saldo manual", retrieve: "Ambil via Computer Use", sourceManual: "Manual", sourceAuto: "Computer Use", current: "Terkini", stale: "Perlu diperbarui", finance: "Finance", ceo: "CEO" },
-  en: { dashboard: "Cash Dashboard", accounts: "Bank Accounts", expenses: "Expense Planning", forecast: "6-Month Forecast", balance: "Available balance", manual: "Enter balance manually", retrieve: "Retrieve via Computer Use", sourceManual: "Manual", sourceAuto: "Computer Use", current: "Current", stale: "Stale", finance: "Finance", ceo: "CEO" },
+  id: { dashboard: "Dashboard Kas", accounts: "Rekening Bank", expenses: "Rencana Pengeluaran", forecast: "Forecast 6 Bulan", balance: "Saldo tersedia", manual: "Input saldo manual", sourceManual: "Manual", sourceLegacy: "Riwayat legacy", current: "Terkini", stale: "Perlu diperbarui", finance: "Finance", ceo: "CEO" },
+  en: { dashboard: "Cash Dashboard", accounts: "Bank Accounts", expenses: "Expense Planning", forecast: "6-Month Forecast", balance: "Available balance", manual: "Enter balance manually", sourceManual: "Manual", sourceLegacy: "Legacy record", current: "Current", stale: "Stale", finance: "Finance", ceo: "CEO" },
 } as const;
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -53,6 +53,7 @@ export default function Home() {
   const [view, setView] = useState<View>("dashboard");
   const [language, setLanguage] = useState<"id" | "en">("id");
   const [actor, setActor] = useState<Actor | null>(null);
+  const [banks, setBanks] = useState<Bank[]>([]);
   const [balances, setBalances] = useState<Balance[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [forecast, setForecast] = useState<Forecast | null>(null);
@@ -62,23 +63,27 @@ export default function Home() {
   const [manualAccountId, setManualAccountId] = useState("");
   const [manualAmount, setManualAmount] = useState("");
   const [manualNote, setManualNote] = useState("");
+  const [accountForm, setAccountForm] = useState({ bankInstitutionId: "", displayName: "", accountNumber: "" });
   const [expenseForm, setExpenseForm] = useState({ title: "", category: "payroll", amount: "", plannedDate: "", recurrence: "one_time" });
   const t = labels[language];
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const [session, balanceResponse, expenseResponse, forecastResponse] = await Promise.all([
+      const [session, bankResponse, balanceResponse, expenseResponse, forecastResponse] = await Promise.all([
         api<{ actor: Actor }>("/api/auth/session"),
+        api<{ banks: Array<{ id: string; code: string; name: string }> }>("/api/banks"),
         api<{ balances: Balance[] }>("/api/balances"),
         api<{ expenses: Expense[] }>("/api/expenses"),
         api<Forecast>("/api/forecast"),
       ]);
       setActor(session.actor);
+      setBanks(bankResponse.banks);
       setBalances(balanceResponse.balances);
       setExpenses(expenseResponse.expenses);
       setForecast(forecastResponse);
       setManualAccountId((current) => current || balanceResponse.balances[0]?.accountId || "");
+      setAccountForm((current) => ({ ...current, bankInstitutionId: current.bankInstitutionId || bankResponse.banks[0]?.id || "" }));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Gagal memuat dashboard");
     } finally {
@@ -105,11 +110,14 @@ export default function Home() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Saldo manual gagal disimpan"); }
   }
 
-  async function requestRetrieval(accountId: string) {
+  async function submitBankAccount(event: FormEvent) {
+    event.preventDefault();
     try {
-      const result = await api<{ message: string }>("/api/retrieval-runs", { method: "POST", body: JSON.stringify({ bankAccountId: accountId }) });
-      setMessage(result.message);
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "Retrieval gagal dibuat"); }
+      await api("/api/accounts", { method: "POST", body: JSON.stringify(accountForm) });
+      setAccountForm((current) => ({ ...current, displayName: "", accountNumber: "" }));
+      setMessage("Rekening bank berhasil ditambahkan.");
+      await refresh();
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Rekening gagal ditambahkan"); }
   }
 
   async function submitExpense(event: FormEvent) {
@@ -120,8 +128,10 @@ export default function Home() {
     } catch (cause) { setError(cause instanceof Error ? cause.message : "Pengeluaran gagal dibuat"); }
   }
 
-  async function updateExpense(id: string, status: "approved" | "paid") {
-    try { await api(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify({ status }) }); setMessage("Status pengeluaran diperbarui."); await refresh(); }
+  async function updateExpense(id: string, title: string, currentStatus: Expense["status"], nextStatus: "approved" | "paid") {
+    const confirmed = window.confirm(`Confirm status change for "${title}"?\n\n${currentStatus} → ${nextStatus}`);
+    if (!confirmed) return;
+    try { await api(`/api/expenses/${id}`, { method: "PATCH", body: JSON.stringify({ status: nextStatus }) }); setMessage("Status pengeluaran diperbarui."); await refresh(); }
     catch (cause) { setError(cause instanceof Error ? cause.message : "Status gagal diperbarui"); }
   }
 
@@ -153,20 +163,24 @@ export default function Home() {
       {(message || error) && <div className={error ? "notice error" : "notice"}><CircleAlert size={17} />{error ?? message}<button onClick={() => { setError(null); setMessage(null); }}>×</button></div>}
 
       {view === "dashboard" && <>
-        <div className="metric-grid"><section className="metric teal"><small>{t.balance}</small><strong>{formatMoney(totalCash)}</strong><span>{balances.length} rekening terdaftar</span></section><section className="metric purple"><small>Submitted expenses</small><strong>{formatMoney(submitted)}</strong><span>Menunggu approval</span></section><section className="metric orange"><small>Approved expenses</small><strong>{formatMoney(approved)}</strong><span>Menunggu pembayaran</span></section><section className="metric"><small>Stale balances</small><strong>{staleCount}</strong><span>Perlu retrieval atau input manual</span></section></div>
-        <div className="grid"><BalancePanel balances={balances} role={actor.role} t={t} onManual={(id) => { setManualAccountId(id); setView("accounts"); }} onRetrieve={(id) => void requestRetrieval(id)} /><ForecastPanel months={baseMonths} t={t} /></div>
-        <div className="grid"><ExpensePanel expenses={expenses.slice(0, 5)} onUpdate={updateExpense} role={actor.role} /><section className="panel"><div className="panel-heading"><div><h2>Security boundary</h2><p>Current operational guardrails</p></div><ShieldCheck color="var(--accent)" size={22} /></div><div className="list-stack"><div className="expense-row"><div><strong>Portal access</strong><small>Read-only, human-in-the-loop</small></div><span className="pill auto">Protected</span></div><div className="expense-row"><div><strong>Bank credentials</strong><small>Never sent to this app</small></div><span className="pill auto">Not stored</span></div><div className="expense-row"><div><strong>Transfers</strong><small>No payment or transfer API</small></div><span className="pill">Disabled</span></div></div></section></div>
+        <div className="metric-grid"><section className="metric teal"><small>{t.balance}</small><strong>{formatMoney(totalCash)}</strong><span>{balances.length} rekening terdaftar</span></section><section className="metric purple"><small>Submitted expenses</small><strong>{formatMoney(submitted)}</strong><span>Menunggu approval</span></section><section className="metric orange"><small>Approved expenses</small><strong>{formatMoney(approved)}</strong><span>Menunggu pembayaran</span></section><section className="metric"><small>Stale balances</small><strong>{staleCount}</strong><span>Perlu input manual</span></section></div>
+        <div className="grid"><BalancePanel balances={balances} role={actor.role} t={t} onManual={(id) => { setManualAccountId(id); setView("accounts"); }} /><ForecastPanel months={baseMonths} t={t} /></div>
+        <div className="grid"><ExpensePanel expenses={expenses.slice(0, 5)} onUpdate={updateExpense} role={actor.role} /><section className="panel"><div className="panel-heading"><div><h2>Security boundary</h2><p>Current operational guardrails</p></div><ShieldCheck color="var(--accent)" size={22} /></div><div className="list-stack"><div className="expense-row"><div><strong>Balance updates</strong><small>Manual Finance entry only</small></div><span className="pill auto">Controlled</span></div><div className="expense-row"><div><strong>Bank credentials</strong><small>Never sent to this app</small></div><span className="pill auto">Not stored</span></div><div className="expense-row"><div><strong>Automatic retrieval</strong><small>Computer Use balance updates</small></div><span className="pill">Disabled</span></div></div></section></div>
       </>}
 
-      {view === "accounts" && <div className="grid"><BalancePanel balances={balances} role={actor.role} t={t} onManual={(id) => setManualAccountId(id)} onRetrieve={(id) => void requestRetrieval(id)} /><ManualBalanceForm balances={balances} accountId={manualAccountId} setAccountId={setManualAccountId} amount={manualAmount} setAmount={setManualAmount} note={manualNote} setNote={setManualNote} onSubmit={submitManualBalance} t={t} role={actor.role} /></div>}
+      {view === "accounts" && <><div className="grid"><BalancePanel balances={balances} role={actor.role} t={t} onManual={(id) => setManualAccountId(id)} /><ManualBalanceForm balances={balances} accountId={manualAccountId} setAccountId={setManualAccountId} amount={manualAmount} setAmount={setManualAmount} note={manualNote} setNote={setManualNote} onSubmit={submitManualBalance} t={t} role={actor.role} /></div><ManualAccountForm banks={banks} form={accountForm} setForm={setAccountForm} onSubmit={submitBankAccount} role={actor.role} /></>}
       {view === "expenses" && <div className="grid"><ExpensePanel expenses={expenses} onUpdate={updateExpense} role={actor.role} /><ExpenseForm form={expenseForm} setForm={setExpenseForm} onSubmit={submitExpense} role={actor.role} /></div>}
       {view === "forecast" && <div className="grid"><ForecastPanel months={baseMonths} t={t} /><section className="panel"><div className="panel-heading"><div><h2>Scenario planning</h2><p>Forecast is deterministic and input-driven.</p></div><FileSpreadsheet size={22} color="var(--accent)" /></div><p className="muted">Base, optimistic, and conservative scenarios are available through the forecast API. Cash movement recommendations are informational only; no transfer is executed.</p><div className="action-row"><a className="button primary" href="/api/reports/export.xlsx"><FileSpreadsheet size={15} />Export Excel</a></div></section></div>}
     </section>
   </main>;
 }
 
-function BalancePanel({ balances, role, t, onManual, onRetrieve }: { balances: Balance[]; role: Role; t: typeof labels.id; onManual: (id: string) => void; onRetrieve: (id: string) => void }) {
-  return <section className="panel"><div className="panel-heading"><div><h2>{t.accounts}</h2><p>Latest available balance by account</p></div><span className="pill"><Landmark size={13} />{balances.length} accounts</span></div><div className="balance-list">{balances.map((balance) => <div className="balance-card" key={balance.accountId}><div className="balance-name"><strong>{balance.bank} · {balance.displayName}</strong><small>{formatAccount(balance.accountNumber)} · {balance.capturedAt ? date.format(new Date(balance.capturedAt)) : "Belum ada data"}</small><span className={balance.source === "manual" ? "pill manual" : "pill auto"}>{balance.source === "manual" ? t.sourceManual : t.sourceAuto} · {balance.freshness === "current" ? t.current : t.stale}</span></div><div className="balance-value"><strong>{formatMoney(balance.availableBalance)}</strong>{role === "FINANCE" && <div className="action-row"><button className="button" onClick={() => onManual(balance.accountId)}><Plus size={13} />Manual</button><button className="button secondary" onClick={() => onRetrieve(balance.accountId)}><LogIn size={13} />Portal</button></div>}</div></div>)}</div></section>;
+function BalancePanel({ balances, role, t, onManual }: { balances: Balance[]; role: Role; t: typeof labels.id; onManual: (id: string) => void }) {
+  return <section className="panel"><div className="panel-heading"><div><h2>{t.accounts}</h2><p>Latest balance entered manually by Finance</p></div><span className="pill"><Landmark size={13} />{balances.length} accounts</span></div><div className="balance-list">{balances.map((balance) => <div className="balance-card" key={balance.accountId}><div className="balance-name"><strong>{balance.bank} · {balance.displayName}</strong><small>{formatAccount(balance.accountNumber)} · {balance.capturedAt ? date.format(new Date(balance.capturedAt)) : "Belum ada data"}</small><span className={balance.source === "manual" ? "pill manual" : "pill"}>{balance.source === "manual" ? t.sourceManual : t.sourceLegacy} · {balance.freshness === "current" ? t.current : t.stale}</span></div><div className="balance-value"><strong>{formatMoney(balance.availableBalance)}</strong>{role === "FINANCE" && <div className="action-row"><button className="button" onClick={() => onManual(balance.accountId)}><Plus size={13} />Manual</button></div>}</div></div>)}</div></section>;
+}
+
+function ManualAccountForm({ banks, form, setForm, onSubmit, role }: { banks: Bank[]; form: { bankInstitutionId: string; displayName: string; accountNumber: string }; setForm: (value: { bankInstitutionId: string; displayName: string; accountNumber: string }) => void; onSubmit: (event: FormEvent) => void; role: Role }) {
+  return <section className="panel"><div className="panel-heading"><div><h2>Tambah rekening bank</h2><p>Finance-only manual account registration · IDR</p></div><Landmark color="var(--accent)" /></div>{role !== "FINANCE" ? <div className="empty">Mode CEO hanya dapat membaca daftar rekening.</div> : <form className="form-grid" onSubmit={onSubmit}><label className="field"><span>Bank</span><select value={form.bankInstitutionId} onChange={(event) => setForm({ ...form, bankInstitutionId: event.target.value })} required><option value="" disabled>Pilih bank</option>{banks.map((bank) => <option key={bank.id} value={bank.id}>{bank.name} ({bank.code})</option>)}</select></label><label className="field"><span>Nama rekening</span><input value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} placeholder="Contoh: BNI Operasional" required /></label><label className="field full"><span>Nomor rekening</span><input inputMode="numeric" value={form.accountNumber} onChange={(event) => setForm({ ...form, accountNumber: event.target.value })} placeholder="Nomor rekening bank" required /></label><div className="form-actions"><button type="submit" className="button primary"><Plus size={15} />Simpan rekening</button></div></form>}</section>;
 }
 
 function ManualBalanceForm({ balances, accountId, setAccountId, amount, setAmount, note, setNote, onSubmit, t, role }: { balances: Balance[]; accountId: string; setAccountId: (value: string) => void; amount: string; setAmount: (value: string) => void; note: string; setNote: (value: string) => void; onSubmit: (event: FormEvent) => void; t: typeof labels.id; role: Role }) {
@@ -178,8 +192,8 @@ function ForecastPanel({ months, t }: { months: ForecastMonth[]; t: typeof label
   return <section className="panel"><div className="panel-heading"><div><h2>{t.forecast}</h2><p>Base scenario · IDR</p></div><BarChart3 color="var(--accent-2)" /></div>{months.length ? <div className="chart-wrap">{months.map((month) => <div className="bar-row" key={month.month}><span>{month.month}</span><div className="bar-track"><div className="bar-fill" style={{ width: `${Math.max(4, Math.min(100, Number(month.closingBalance) / max * 100))}%` }} /></div><b>{formatMoney(month.closingBalance)}</b></div>)}</div> : <div className="empty">Belum ada data forecast.</div>}</section>;
 }
 
-function ExpensePanel({ expenses, onUpdate, role }: { expenses: Expense[]; onUpdate: (id: string, status: "approved" | "paid") => void; role: Role }) {
-  return <section className="panel"><div className="panel-heading"><div><h2>Expense planning</h2><p>Submitted · approved · paid</p></div><WalletCards color="var(--warning)" /></div>{expenses.length ? <div className="expense-list">{expenses.map((expense) => <div className="expense-row" key={expense.id}><div><strong>{expense.title}</strong><small>{expense.category} · {new Date(expense.plannedDate).toLocaleDateString("id-ID")}</small></div><div className="balance-value"><strong>{formatMoney(expense.amount)}</strong><span className={`status ${expense.status}`}>{expense.status}</span>{role === "FINANCE" && expense.status !== "paid" && <div className="action-row"><button className="button" onClick={() => onUpdate(expense.id, expense.status === "submitted" ? "approved" : "paid")}>{expense.status === "submitted" ? "Approve" : "Mark paid"}</button></div>}</div></div>)}</div> : <div className="empty">Belum ada rencana pengeluaran.</div>}</section>;
+function ExpensePanel({ expenses, onUpdate, role }: { expenses: Expense[]; onUpdate: (id: string, title: string, currentStatus: Expense["status"], nextStatus: "approved" | "paid") => void; role: Role }) {
+  return <section className="panel"><div className="panel-heading"><div><h2>Expense planning</h2><p>Confirm before changing submitted · approved · paid status</p></div><WalletCards color="var(--warning)" /></div>{expenses.length ? <div className="expense-list">{expenses.map((expense) => <div className="expense-row" key={expense.id}><div><strong>{expense.title}</strong><small>{expense.category} · {new Date(expense.plannedDate).toLocaleDateString("id-ID")}</small></div><div className="balance-value"><strong>{formatMoney(expense.amount)}</strong><span className={`status ${expense.status}`}>{expense.status}</span>{role === "FINANCE" && expense.status !== "paid" && <div className="action-row"><button className="button" onClick={() => onUpdate(expense.id, expense.title, expense.status, expense.status === "submitted" ? "approved" : "paid")}>{expense.status === "submitted" ? "Approve" : "Mark paid"}</button></div>}</div></div>)}</div> : <div className="empty">Belum ada rencana pengeluaran.</div>}</section>;
 }
 
 function ExpenseForm({ form, setForm, onSubmit, role }: { form: { title: string; category: string; amount: string; plannedDate: string; recurrence: string }; setForm: (value: { title: string; category: string; amount: string; plannedDate: string; recurrence: string }) => void; onSubmit: (event: FormEvent) => void; role: Role }) {

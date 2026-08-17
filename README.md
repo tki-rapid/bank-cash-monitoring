@@ -7,7 +7,8 @@ PT TKI bank cash monitoring and office expense planning.
 - CEO and Finance dashboard
 - Multiple bank accounts in IDR
 - Manual available-balance input
-- Read-only Computer Use retrieval contract for BNI
+- Manual bank-account registration by Finance
+- Automatic and Computer Use balance retrieval disabled
 - Six-month cash forecast scenarios
 - Expense planning: submitted, approved, paid
 - Excel reports
@@ -27,4 +28,4 @@ This initial build uses a local internal demo actor switcher until PT TKI select
 
 ## Safety boundary
 
-The application never accepts or stores bank passwords, OTPs, CAPTCHA values, cookies, or bank sessions. Computer Use retrieval is human-in-the-loop and read-only. Manual balance entries are auditable and labelled separately from Computer Use results.
+The application never accepts or stores bank passwords, OTPs, CAPTCHA values, cookies, or bank sessions. Bank accounts and balances are maintained manually by Finance. Automatic and Computer Use balance updates are disabled. Manual balance entries are auditable and immutable.

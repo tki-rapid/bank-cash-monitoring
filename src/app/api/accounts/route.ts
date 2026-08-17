@@ -14,10 +14,12 @@ export async function GET() {
 export async function POST(request: Request) {
   const actor = await getCurrentActor();
   if (!canManageExpenses(actor)) return NextResponse.json({ error: "Hanya Finance yang dapat menambah rekening" }, { status: 403 });
-  const parsed = createAccountSchema.safeParse(await request.json().catch(() => ({})));
+  const rawBody = await request.json().catch(() => null);
+  if (!rawBody || typeof rawBody !== "object" || Array.isArray(rawBody)) return NextResponse.json({ error: "Body request tidak valid" }, { status: 400 });
+  const parsed = createAccountSchema.safeParse(rawBody);
   if (!parsed.success) return NextResponse.json({ error: "Data rekening tidak valid", details: parsed.error.flatten() }, { status: 400 });
   const institution = await prisma.bankInstitution.findFirst({ where: { id: parsed.data.bankInstitutionId, active: true } });
   if (!institution) return NextResponse.json({ error: "Bank institution tidak ditemukan atau tidak aktif" }, { status: 404 });
   const account = await prisma.bankAccount.create({ data: parsed.data });
-  return NextResponse.json(account, { status: 201 });
+  return NextResponse.json(serializeBigInt({ account }), { status: 201 });
 }
