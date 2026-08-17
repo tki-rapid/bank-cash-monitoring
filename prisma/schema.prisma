@@ -1,0 +1,203 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AppRole {
+  CEO
+  FINANCE
+}
+
+enum BankRunStatus {
+  requested
+  awaiting_user_login
+  awaiting_captcha
+  extracting
+  succeeded
+  failed
+  cancelled
+}
+
+enum BalanceSource {
+  computer_use
+  manual
+}
+
+enum ExpenseCategory {
+  payroll
+  vendors
+  infrastructure
+  taxes
+  employee_bonus
+  other
+}
+
+enum ExpenseStatus {
+  submitted
+  approved
+  paid
+}
+
+enum ExpenseRecurrence {
+  one_time
+  monthly
+  quarterly
+  annual
+}
+
+enum ForecastScenario {
+  base
+  optimistic
+  conservative
+}
+
+enum CashFlowDirection {
+  inflow
+  outflow
+}
+
+model User {
+  id                    String              @id @default(cuid())
+  email                 String              @unique
+  name                  String
+  role                  AppRole
+  active                Boolean             @default(true)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  createdExpenses       ExpensePlan[]       @relation("ExpenseCreator")
+  approvedExpenses      ExpensePlan[]       @relation("ExpenseApprover")
+  auditLogs             AuditLog[]
+  bankRuns              BankRetrievalRun[]
+  manualBalanceEntries  BalanceSnapshot[]   @relation("ManualBalanceEntry")
+  forecastInputs        ForecastInput[]
+}
+
+model BankInstitution {
+  id            String             @id @default(cuid())
+  code          String             @unique
+  name          String
+  portalKey     String             @unique
+  active        Boolean            @default(true)
+  accounts      BankAccount[]
+  retrievalRuns BankRetrievalRun[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model BankAccount {
+  id                    String             @id @default(cuid())
+  bankInstitutionId     String
+  displayName           String
+  accountNumber         String
+  currency              String             @default("IDR")
+  active                Boolean            @default(true)
+  lastAvailableBalance  BigInt?
+  lastCapturedAt        DateTime?
+  lastBalanceSource     BalanceSource?
+  bank                  BankInstitution    @relation(fields: [bankInstitutionId], references: [id])
+  balanceSnapshots      BalanceSnapshot[]
+  retrievalRuns         BankRetrievalRun[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  @@index([bankInstitutionId, active])
+}
+
+model BankRetrievalRun {
+  id                 String           @id @default(cuid())
+  bankInstitutionId  String
+  bankAccountId      String
+  requestedById      String
+  status             BankRunStatus
+  userAction         String?
+  errorCode          String?
+  connectorVersion   String
+  requestedAt        DateTime         @default(now())
+  startedAt          DateTime?
+  completedAt        DateTime?
+  bank               BankInstitution  @relation(fields: [bankInstitutionId], references: [id])
+  account            BankAccount      @relation(fields: [bankAccountId], references: [id])
+  requestedBy        User             @relation(fields: [requestedById], references: [id])
+  snapshot           BalanceSnapshot?
+
+  @@index([bankAccountId, requestedAt])
+  @@index([status, requestedAt])
+}
+
+model BalanceSnapshot {
+  id                    String            @id @default(cuid())
+  bankAccountId         String
+  retrievalRunId        String?           @unique
+  enteredById           String?
+  source                BalanceSource
+  availableBalance      BigInt
+  capturedAt            DateTime
+  accountNumberAtCapture String
+  note                  String?
+  account               BankAccount       @relation(fields: [bankAccountId], references: [id])
+  retrievalRun          BankRetrievalRun? @relation(fields: [retrievalRunId], references: [id])
+  enteredBy             User?             @relation("ManualBalanceEntry", fields: [enteredById], references: [id])
+
+  @@index([bankAccountId, capturedAt])
+  @@index([source, capturedAt])
+}
+
+model ExpensePlan {
+  id          String            @id @default(cuid())
+  code        String            @unique
+  title       String
+  category    ExpenseCategory
+  amount      BigInt
+  recurrence  ExpenseRecurrence
+  plannedDate DateTime
+  notes       String?
+  status      ExpenseStatus     @default(submitted)
+  createdById String
+  approvedById String?
+  approvedAt  DateTime?
+  paidAt      DateTime?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  createdBy   User               @relation("ExpenseCreator", fields: [createdById], references: [id])
+  approvedBy  User?              @relation("ExpenseApprover", fields: [approvedById], references: [id])
+
+  @@index([plannedDate, status])
+  @@index([category, plannedDate])
+}
+
+model ForecastInput {
+  id            String             @id @default(cuid())
+  title         String
+  direction     CashFlowDirection
+  amount        BigInt
+  scenario      ForecastScenario
+  recurrence    ExpenseRecurrence
+  effectiveDate DateTime
+  endDate       DateTime?
+  notes         String?
+  active        Boolean            @default(true)
+  createdById   String
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  createdBy     User               @relation(fields: [createdById], references: [id])
+
+  @@index([scenario, effectiveDate, active])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  user       User?    @relation(fields: [userId], references: [id])
+
+  @@index([entityType, entityId, createdAt])
+  @@index([createdAt])
+}
