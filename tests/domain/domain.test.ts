@@ -7,7 +7,7 @@ import {
   isValidAvailableBalance,
   isValidIdrAmount,
 } from "../../src/lib/domain";
-import { createAccountSchema } from "../../src/lib/validation";
+import { createAccountSchema, userCreateSchema, userUpdateSchema } from "../../src/lib/validation";
 
 test("expense workflow has exactly the requested statuses", () => {
   assert.deepEqual(expenseStatuses, ["submitted", "approved", "paid"]);
@@ -34,4 +34,11 @@ test("available balance must be a non-negative integer in IDR", () => {
 test("manual bank-account registration accepts numeric account details only", () => {
   assert.equal(createAccountSchema.safeParse({ bankInstitutionId: "bank-1", displayName: "BNI Operasional", accountNumber: "1234 5678" }).success, true);
   assert.equal(createAccountSchema.safeParse({ bankInstitutionId: "bank-1", displayName: "BNI Operasional", accountNumber: "account-name" }).success, false);
+});
+
+test("user management validates Google login accounts", () => {
+  const created = userCreateSchema.parse({ name: "Arif Arinto", email: "ARIFARINTO@GMAIL.COM", role: "CEO" });
+  assert.equal(created.email, "arifarinto@gmail.com");
+  assert.equal(userUpdateSchema.safeParse({ active: false }).success, true);
+  assert.equal(userUpdateSchema.safeParse({}).success, false);
 });

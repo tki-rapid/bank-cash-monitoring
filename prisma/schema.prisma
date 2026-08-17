@@ -61,19 +61,60 @@ enum CashFlowDirection {
 }
 
 model User {
-  id                    String              @id @default(cuid())
-  email                 String              @unique
-  name                  String
-  role                  AppRole
-  active                Boolean             @default(true)
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
-  createdExpenses       ExpensePlan[]       @relation("ExpenseCreator")
-  approvedExpenses      ExpensePlan[]       @relation("ExpenseApprover")
-  auditLogs             AuditLog[]
-  bankRuns              BankRetrievalRun[]
-  manualBalanceEntries  BalanceSnapshot[]   @relation("ManualBalanceEntry")
-  forecastInputs        ForecastInput[]
+  id                   String             @id @default(cuid())
+  email                String             @unique
+  name                 String
+  role                 AppRole            @default(FINANCE)
+  active               Boolean            @default(false)
+  emailVerified        DateTime?
+  image                String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  accounts             Account[]
+  sessions             Session[]
+  createdExpenses      ExpensePlan[]      @relation("ExpenseCreator")
+  approvedExpenses     ExpensePlan[]      @relation("ExpenseApprover")
+  auditLogs            AuditLog[]
+  bankRuns             BankRetrievalRun[]
+  manualBalanceEntries BalanceSnapshot[]  @relation("ManualBalanceEntry")
+  forecastInputs       ForecastInput[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
 }
 
 model BankInstitution {
@@ -89,88 +130,88 @@ model BankInstitution {
 }
 
 model BankAccount {
-  id                    String             @id @default(cuid())
-  bankInstitutionId     String
-  displayName           String
-  accountNumber         String
-  currency              String             @default("IDR")
-  active                Boolean            @default(true)
-  lastAvailableBalance  BigInt?
-  lastCapturedAt        DateTime?
-  lastBalanceSource     BalanceSource?
-  bank                  BankInstitution    @relation(fields: [bankInstitutionId], references: [id])
-  balanceSnapshots      BalanceSnapshot[]
-  retrievalRuns         BankRetrievalRun[]
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  id                   String             @id @default(cuid())
+  bankInstitutionId    String
+  displayName          String
+  accountNumber        String
+  currency             String             @default("IDR")
+  active               Boolean            @default(true)
+  lastAvailableBalance BigInt?
+  lastCapturedAt       DateTime?
+  lastBalanceSource    BalanceSource?
+  bank                 BankInstitution    @relation(fields: [bankInstitutionId], references: [id])
+  balanceSnapshots     BalanceSnapshot[]
+  retrievalRuns        BankRetrievalRun[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
 
   @@index([bankInstitutionId, active])
 }
 
 model BankRetrievalRun {
-  id                 String           @id @default(cuid())
-  bankInstitutionId  String
-  bankAccountId      String
-  requestedById      String
-  status             BankRunStatus
-  userAction         String?
-  errorCode          String?
-  connectorVersion   String
-  requestedAt        DateTime         @default(now())
-  startedAt          DateTime?
-  completedAt        DateTime?
-  bank               BankInstitution  @relation(fields: [bankInstitutionId], references: [id])
-  account            BankAccount      @relation(fields: [bankAccountId], references: [id])
-  requestedBy        User             @relation(fields: [requestedById], references: [id])
-  snapshot           BalanceSnapshot?
+  id                String           @id @default(cuid())
+  bankInstitutionId String
+  bankAccountId     String
+  requestedById     String
+  status            BankRunStatus
+  userAction        String?
+  errorCode         String?
+  connectorVersion  String
+  requestedAt       DateTime         @default(now())
+  startedAt         DateTime?
+  completedAt       DateTime?
+  bank              BankInstitution  @relation(fields: [bankInstitutionId], references: [id])
+  account           BankAccount      @relation(fields: [bankAccountId], references: [id])
+  requestedBy       User             @relation(fields: [requestedById], references: [id])
+  snapshot          BalanceSnapshot?
 
   @@index([bankAccountId, requestedAt])
   @@index([status, requestedAt])
 }
 
 model BalanceSnapshot {
-  id                    String            @id @default(cuid())
-  bankAccountId         String
-  retrievalRunId        String?           @unique
-  enteredById           String?
-  source                BalanceSource
-  availableBalance      BigInt
-  capturedAt            DateTime
+  id                     String            @id @default(cuid())
+  bankAccountId          String
+  retrievalRunId         String?           @unique
+  enteredById            String?
+  source                 BalanceSource
+  availableBalance       BigInt
+  capturedAt             DateTime
   accountNumberAtCapture String
-  note                  String?
-  account               BankAccount       @relation(fields: [bankAccountId], references: [id])
-  retrievalRun          BankRetrievalRun? @relation(fields: [retrievalRunId], references: [id])
-  enteredBy             User?             @relation("ManualBalanceEntry", fields: [enteredById], references: [id])
+  note                   String?
+  account                BankAccount       @relation(fields: [bankAccountId], references: [id])
+  retrievalRun           BankRetrievalRun? @relation(fields: [retrievalRunId], references: [id])
+  enteredBy              User?             @relation("ManualBalanceEntry", fields: [enteredById], references: [id])
 
   @@index([bankAccountId, capturedAt])
   @@index([source, capturedAt])
 }
 
 model ExpensePlan {
-  id          String            @id @default(cuid())
-  code        String            @unique
-  title       String
-  category    ExpenseCategory
-  amount      BigInt
-  recurrence  ExpenseRecurrence
-  plannedDate DateTime
-  notes       String?
-  status      ExpenseStatus     @default(submitted)
-  createdById String
+  id           String            @id @default(cuid())
+  code         String            @unique
+  title        String
+  category     ExpenseCategory
+  amount       BigInt
+  recurrence   ExpenseRecurrence
+  plannedDate  DateTime
+  notes        String?
+  status       ExpenseStatus     @default(submitted)
+  createdById  String
   approvedById String?
-  approvedAt  DateTime?
-  paidAt      DateTime?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  createdBy   User               @relation("ExpenseCreator", fields: [createdById], references: [id])
-  approvedBy  User?              @relation("ExpenseApprover", fields: [approvedById], references: [id])
+  approvedAt   DateTime?
+  paidAt       DateTime?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  createdBy    User              @relation("ExpenseCreator", fields: [createdById], references: [id])
+  approvedBy   User?             @relation("ExpenseApprover", fields: [approvedById], references: [id])
 
   @@index([plannedDate, status])
   @@index([category, plannedDate])
 }
 
 model ForecastInput {
-  id            String             @id @default(cuid())
+  id            String            @id @default(cuid())
   title         String
   direction     CashFlowDirection
   amount        BigInt
@@ -179,11 +220,11 @@ model ForecastInput {
   effectiveDate DateTime
   endDate       DateTime?
   notes         String?
-  active        Boolean            @default(true)
+  active        Boolean           @default(true)
   createdById   String
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
-  createdBy     User               @relation(fields: [createdById], references: [id])
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  createdBy     User              @relation(fields: [createdById], references: [id])
 
   @@index([scenario, effectiveDate, active])
 }

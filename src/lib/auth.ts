@@ -1,5 +1,7 @@
+import { getServerSession } from "next-auth";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { authOptions, googleAuthConfigured } from "@/lib/google-auth";
 
 export type DemoRole = "CEO" | "FINANCE";
 export type Actor = { id: string; name: string; email: string; role: DemoRole; active: boolean };
@@ -11,7 +13,15 @@ function demoModeEnabled(): boolean {
 }
 
 export async function getCurrentActor(): Promise<Actor> {
-  if (!demoModeEnabled()) throw new Error("Production authentication is not configured. Set up PT TKI authentication before exposure.");
+  if (googleAuthConfigured()) {
+    const session = await getServerSession(authOptions);
+    const email = session?.user?.email;
+    if (!email) throw new Error("Google login is required");
+    const actor = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, role: true, active: true } });
+    if (!actor?.active) throw new Error("Akun belum diaktifkan oleh CEO");
+    return actor as Actor;
+  }
+  if (!demoModeEnabled()) throw new Error("Google authentication is not configured. Set up Google OAuth before exposure.");
   const cookieStore = await cookies();
   const requestedRole = cookieStore.get(roleCookie)?.value;
   const role: DemoRole = requestedRole === "FINANCE" ? "FINANCE" : "CEO";
@@ -36,4 +46,8 @@ export function canReadFinancialData(actor: Pick<Actor, "role" | "active">): boo
 
 export function canManageExpenses(actor: Pick<Actor, "role" | "active">): boolean {
   return actor.active && actor.role === "FINANCE";
+}
+
+export function canManageUsers(actor: Pick<Actor, "role" | "active">): boolean {
+  return actor.active && actor.role === "CEO";
 }

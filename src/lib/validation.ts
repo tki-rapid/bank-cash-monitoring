@@ -20,6 +20,18 @@ export const manualBalanceSchema = z.object({
   note: z.string().max(500).optional(),
 });
 
+export const userCreateSchema = z.object({
+  name: z.string().min(2).max(120),
+  email: z.string().email().max(254).transform((value) => value.trim().toLowerCase()),
+  role: z.enum(["CEO", "FINANCE"]),
+});
+
+export const userUpdateSchema = z.object({
+  name: z.string().min(2).max(120).optional(),
+  role: z.enum(["CEO", "FINANCE"]).optional(),
+  active: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, "At least one field is required");
+
 export const forecastInputSchema = z.object({
   title: z.string().min(2).max(160),
   direction: z.enum(["inflow", "outflow"]),

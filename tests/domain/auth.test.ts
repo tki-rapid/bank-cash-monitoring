@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canManageExpenses, canReadFinancialData, secureRoleCookie } from "../../src/lib/auth";
+import { canManageExpenses, canManageUsers, canReadFinancialData, secureRoleCookie } from "../../src/lib/auth";
 
 test("CEO and Finance can read financial data", () => {
   assert.equal(canReadFinancialData({ role: "CEO", active: true }), true);
@@ -11,6 +11,12 @@ test("CEO and Finance can read financial data", () => {
 test("only Finance manages expenses", () => {
   assert.equal(canManageExpenses({ role: "FINANCE", active: true }), true);
   assert.equal(canManageExpenses({ role: "CEO", active: true }), false);
+});
+
+test("only CEO manages user accounts", () => {
+  assert.equal(canManageUsers({ role: "CEO", active: true }), true);
+  assert.equal(canManageUsers({ role: "FINANCE", active: true }), false);
+  assert.equal(canManageUsers({ role: "CEO", active: false }), false);
 });
 
 test("role cookie is Secure only when the request is HTTPS", () => {

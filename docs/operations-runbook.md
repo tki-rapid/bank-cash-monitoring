@@ -14,6 +14,10 @@ curl -fsS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:10005/
 curl -fsS -o /dev/null -w '%{http_code}\n' http://10.10.0.7:10005/
 ```
 
+## Login and user management
+
+When Google OAuth is configured, users sign in with the Google button. The CEO opens **User Management** to add or activate accounts and assign `CEO` or `Finance`. The Google email must exactly match the registered email. Demo mode is only for internal setup.
+
 ## Manual bank accounts
 
 Finance opens **Bank Accounts**, selects an active bank, enters a display name and account number, and submits. The account is created in IDR without any bank portal connection.
