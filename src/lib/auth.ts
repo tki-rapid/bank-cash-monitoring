@@ -24,6 +24,12 @@ export function roleCookieName(): string {
   return roleCookie;
 }
 
+export function secureRoleCookie(request: Request): boolean {
+  const forwardedProtocol = request.headers.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProtocol ?? new URL(request.url).protocol.replace(":", "");
+  return protocol === "https";
+}
+
 export function canReadFinancialData(actor: Pick<Actor, "role" | "active">): boolean {
   return actor.active && (actor.role === "CEO" || actor.role === "FINANCE");
 }

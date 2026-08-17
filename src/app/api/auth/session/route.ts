@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCurrentActor, roleCookieName } from "@/lib/auth";
+import { getCurrentActor, roleCookieName, secureRoleCookie } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export async function GET() {
@@ -21,6 +21,6 @@ export async function POST(request: Request) {
   const role = body.role === "FINANCE" ? "FINANCE" : body.role === "CEO" ? "CEO" : null;
   if (!role) return NextResponse.json({ error: "Role tidak valid" }, { status: 400 });
   const response = NextResponse.json({ ok: true, role });
-  response.cookies.set(roleCookieName(), role, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 60 * 60 * 8 });
+  response.cookies.set(roleCookieName(), role, { httpOnly: true, sameSite: "lax", secure: secureRoleCookie(request), path: "/", maxAge: 60 * 60 * 8 });
   return response;
 }
