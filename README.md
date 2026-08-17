@@ -17,6 +17,10 @@ PT TKI bank cash monitoring and office expense planning.
 - Excel reports
 - Indonesian/English responsive UI
 
+## Installation
+
+See [`INSTALLATION.md`](./INSTALLATION.md) for the complete database, demo-mode, Google OAuth, and LAN deployment procedure.
+
 ## Development
 
 ```bash
