@@ -1,8 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { signOut } from "next-auth/react";
+import { signIn, signOut } from "next-auth/react";
 import { Banknote, BarChart3, CheckCircle2, CircleAlert, FileSpreadsheet, Landmark, LayoutDashboard, Plus, RefreshCw, ShieldCheck, UserRound, Users, WalletCards } from "lucide-react";
 
 type Role = "CEO" | "FINANCE";
@@ -218,8 +217,7 @@ export default function Home() {
 }
 
 function LoginScreen({ googleConfigured, error }: { googleConfigured: boolean; error: string | null }) {
-  const router = useRouter();
-  return <main className="login-screen"><section className="login-card"><div className="brand-mark">TKI</div><p className="kicker">PT TKI · CASH CONTROL</p><h1>Sign in to Cash Control</h1><p className="muted">Use your approved PT TKI Google account to access cash monitoring and expense planning.</p>{googleConfigured ? <button className="button primary google-button" onClick={() => router.push("/api/auth/signin/google")}><UserRound size={16} />Continue with Google</button> : <div className="notice error">Google login is not configured on this server yet.</div>}{error && <small className="login-error">{error}</small>}<p className="login-help">Only active accounts created by the CEO can sign in.</p></section></main>;
+  return <main className="login-screen"><section className="login-card"><div className="brand-mark">TKI</div><p className="kicker">PT TKI · CASH CONTROL</p><h1>Sign in to Cash Control</h1><p className="muted">Use your approved PT TKI Google account to access cash monitoring and expense planning.</p>{googleConfigured ? <button className="button primary google-button" onClick={() => void signIn("google", { callbackUrl: "/" })}><UserRound size={16} />Continue with Google</button> : <div className="notice error">Google login is not configured on this server yet.</div>}{error && <small className="login-error">{error}</small>}<p className="login-help">Only active accounts created by the CEO can sign in.</p></section></main>;
 }
 
 function UserManagementPanel({ users, form, setForm, onSubmit, onUpdate }: { users: ManagedUser[]; form: { name: string; email: string; role: Role }; setForm: (value: { name: string; email: string; role: Role }) => void; onSubmit: (event: FormEvent) => void; onUpdate: (id: string, changes: Partial<Pick<ManagedUser, "role" | "active" | "name">>) => void }) {

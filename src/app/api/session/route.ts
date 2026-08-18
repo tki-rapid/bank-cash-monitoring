@@ -7,7 +7,7 @@ export async function GET() {
   const googleConfigured = googleAuthConfigured();
   try {
     const actor = await getCurrentActor();
-    return NextResponse.json({ actor, authMode: googleConfigured ? "google" : "demo", googleConfigured });
+    return NextResponse.json({ actor: actor.active ? actor : null, authMode: googleConfigured ? "google" : "demo", googleConfigured, error: actor.active ? undefined : "Google login is required" });
   } catch (error) {
     return NextResponse.json({ actor: null, authMode: googleConfigured ? "google" : "demo", googleConfigured, error: error instanceof Error ? error.message : "Login diperlukan" });
   }

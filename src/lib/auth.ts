@@ -7,6 +7,7 @@ export type DemoRole = "CEO" | "FINANCE";
 export type Actor = { id: string; name: string; email: string; role: DemoRole; active: boolean };
 
 const roleCookie = "tki_cash_demo_role";
+const guestActor: Actor = { id: "", name: "", email: "", role: "FINANCE", active: false };
 
 function demoModeEnabled(): boolean {
   return process.env.DEMO_MODE === "true";
@@ -16,17 +17,16 @@ export async function getCurrentActor(): Promise<Actor> {
   if (googleAuthConfigured()) {
     const session = await getServerSession(authOptions);
     const email = session?.user?.email;
-    if (!email) throw new Error("Google login is required");
+    if (!email) return guestActor;
     const actor = await prisma.user.findUnique({ where: { email }, select: { id: true, name: true, email: true, role: true, active: true } });
-    if (!actor?.active) throw new Error("Akun belum diaktifkan oleh CEO");
-    return actor as Actor;
+    return actor ? actor as Actor : guestActor;
   }
-  if (!demoModeEnabled()) throw new Error("Google authentication is not configured. Set up Google OAuth before exposure.");
+  if (!demoModeEnabled()) return guestActor;
   const cookieStore = await cookies();
   const requestedRole = cookieStore.get(roleCookie)?.value;
   const role: DemoRole = requestedRole === "FINANCE" ? "FINANCE" : "CEO";
   const actor = await prisma.user.findFirst({ where: { role, active: true }, select: { id: true, name: true, email: true, role: true, active: true } });
-  if (!actor) throw new Error("No active demo actor is available. Run the database seed.");
+  if (!actor) return guestActor;
   return actor as Actor;
 }
 
